@@ -1,0 +1,73 @@
+import { redirect } from "next/navigation";
+import { PieChart } from "lucide-react";
+import { auth } from "@/auth";
+import { signInWithGoogle } from "@/lib/auth/actions";
+
+export default async function LoginPage() {
+  // Already signed in? Skip the login screen.
+  const session = await auth();
+  if (session?.user) redirect("/dashboard");
+
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+      {/* Subtle ambient glow */}
+      <div
+        aria-hidden
+        className="bg-primary/20 pointer-events-none absolute -top-32 left-1/2 size-[36rem] -translate-x-1/2 rounded-full blur-[140px]"
+      />
+
+      <div className="relative w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="bg-primary/15 text-primary mb-5 flex size-12 items-center justify-center rounded-xl">
+            <PieChart className="size-6" />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Welcome to Portfolio
+          </h1>
+          <p className="text-muted-foreground mt-2 text-sm text-balance">
+            All your investments — Indian stocks, mutual funds, and US stocks —
+            in one place.
+          </p>
+        </div>
+
+        <div className="border-border bg-card rounded-xl border p-6 shadow-sm">
+          <form action={signInWithGoogle}>
+            <button
+              type="submit"
+              className="border-border bg-background hover:bg-accent focus-visible:ring-ring flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <GoogleIcon className="size-4.5" />
+              Continue with Google
+            </button>
+          </form>
+          <p className="text-muted-foreground mt-4 text-center text-xs text-balance">
+            We only read your name, email, and photo to create your account.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"
+      />
+    </svg>
+  );
+}

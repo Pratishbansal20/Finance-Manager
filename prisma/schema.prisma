@@ -1,0 +1,322 @@
+// Portfolio Dashboard — Prisma schema
+// Money is always Decimal (never Float). Native currency is stored alongside
+// the base-currency (INR) values plus the FX rate used, so valuations are reproducible.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) standard models — wired up in Milestone 2 (Google OAuth)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts     Account[]
+  sessions     Session[]
+  holdings     Holding[]
+  snapshots    PortfolioSnapshot[]
+  bankAccounts BankAccount[]
+  creditCards  CreditCard[]
+  sipPlans     SipPlan[]
+  creditScores CreditScore[]
+  manualAssets ManualAsset[]
+  security     UserSecurity?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  sessionToken String    @unique
+  userId       String
+  expires      DateTime
+  // Set after the app passphrase is verified (second factor on top of Google).
+  unlockedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Domain models
+// ---------------------------------------------------------------------------
+
+enum InstrumentType {
+  IN_STOCK
+  MUTUAL_FUND
+  US_STOCK
+}
+
+enum Country {
+  IN
+  US
+}
+
+// A unique security. Shared across users so one price fetch serves everyone.
+model Instrument {
+  id        String         @id @default(cuid())
+  symbol    String // e.g. "INFY", "AAPL"; AMFI scheme code lives in externalId for MFs
+  name      String
+  type      InstrumentType
+  country   Country
+  currency  String // ISO 4217 of the instrument's native price, e.g. "INR", "USD"
+  externalId String? // source-specific id (AMFI scheme code, exchange ticker, etc.)
+
+  holdings Holding[]
+  prices   Price[]
+  sipPlans SipPlan[]
+
+  @@unique([type, symbol])
+  @@index([type])
+}
+
+// A user's position in an instrument, optionally tagged by the broker it came from.
+// Unique on (userId, instrumentId, source) so re-imports upsert instead of duplicating.
+model Holding {
+  id           String   @id @default(cuid())
+  userId       String
+  instrumentId String
+  quantity     Decimal  @db.Decimal(20, 6)
+  avgBuyPrice  Decimal  @db.Decimal(20, 6) // in the instrument's native currency
+  source       String   @default("MANUAL") // e.g. "GROWW", "INDMONEY", "MANUAL"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, instrumentId, source])
+  @@index([userId])
+}
+
+// Time-series of prices for an instrument; the latest row is the current price.
+model Price {
+  id           String   @id @default(cuid())
+  instrumentId String
+  price        Decimal  @db.Decimal(20, 6)
+  currency     String
+  asOf         DateTime
+  source       String // which PriceProvider produced it
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, asOf])
+  @@index([instrumentId, asOf])
+}
+
+// Time-series of FX rates (e.g. USD -> INR), used to normalize to base currency.
+model FxRate {
+  id    String   @id @default(cuid())
+  base  String // e.g. "USD"
+  quote String // e.g. "INR"
+  rate  Decimal  @db.Decimal(20, 6)
+  asOf  DateTime
+  source String
+
+  @@unique([base, quote, asOf])
+  @@index([base, quote, asOf])
+}
+
+// Daily snapshot of a user's total portfolio value — powers the performance curve.
+model PortfolioSnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  totalValueInr Decimal @db.Decimal(20, 2)
+  investedInr   Decimal @db.Decimal(20, 2)
+  asOf         DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, asOf])
+  @@index([userId, asOf])
+}
+
+// ---------------------------------------------------------------------------
+// Personal finance hub: cash, liabilities, recurring investments, credit, security
+// ---------------------------------------------------------------------------
+
+enum BankAccountType {
+  SAVINGS
+  CURRENT
+  SALARY
+  FIXED_DEPOSIT
+  OTHER
+}
+
+enum CardNetwork {
+  VISA
+  MASTERCARD
+  RUPAY
+  AMEX
+  DINERS
+  OTHER
+}
+
+enum CreditBureau {
+  CIBIL
+  EXPERIAN
+  CRIF
+  EQUIFAX
+}
+
+enum SipFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum AssetCategory {
+  CASH
+  FIXED_DEPOSIT
+  GOLD
+  EPF
+  PPF
+  REAL_ESTATE
+  OTHER
+}
+
+// A bank account and its current balance (an asset). Only the last 4 digits are
+// stored by default; a full number/IFSC may be stored encrypted (M5/M6).
+model BankAccount {
+  id          String          @id @default(cuid())
+  userId      String
+  bankName    String
+  accountType BankAccountType @default(SAVINGS)
+  nickname    String?
+  last4       String?
+  balanceInr  Decimal         @db.Decimal(20, 2)
+  asOf        DateTime        @default(now())
+  // AES-256-GCM ciphertext (iv:authTag:ciphertext) — never plaintext.
+  accountNumberEnc String?
+  ifscEnc          String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A credit card (a liability via currentOutstanding) with due-date tracking.
+// NEVER stores the full PAN or CVV — last 4 only.
+model CreditCard {
+  id                String      @id @default(cuid())
+  userId            String
+  issuer            String
+  network           CardNetwork @default(VISA)
+  nickname          String?
+  last4             String?
+  creditLimit       Decimal     @db.Decimal(20, 2)
+  currentOutstanding Decimal    @db.Decimal(20, 2) @default(0)
+  statementDay      Int? // day of month (1-31)
+  dueDay            Int? // day of month (1-31)
+  currentDueDate    DateTime?
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A recurring investment into a mutual fund. Powers "SIP dates + monthly amount".
+model SipPlan {
+  id           String       @id @default(cuid())
+  userId       String
+  instrumentId String
+  amountInr    Decimal      @db.Decimal(20, 2)
+  frequency    SipFrequency @default(MONTHLY)
+  dayOfMonth   Int // 1-31
+  nextDate     DateTime
+  active       Boolean      @default(true)
+  source       String       @default("MANUAL")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([instrumentId])
+}
+
+// Credit score over time; the latest row is the current score.
+model CreditScore {
+  id     String       @id @default(cuid())
+  userId String
+  bureau CreditBureau @default(CIBIL)
+  score  Int
+  asOf   DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bureau, asOf])
+  @@index([userId, bureau, asOf])
+}
+
+// Any non-market asset (cash, FD, gold, EPF/PPF, real estate) for a true net worth.
+model ManualAsset {
+  id        String        @id @default(cuid())
+  userId    String
+  name      String
+  category  AssetCategory @default(CASH)
+  valueInr  Decimal       @db.Decimal(20, 2)
+  asOf      DateTime      @default(now())
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Per-user app passphrase (scrypt). The passphrase itself is never stored.
+model UserSecurity {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  passphraseHash String
+  passphraseSalt String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
