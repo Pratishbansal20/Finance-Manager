@@ -102,6 +102,7 @@ export async function refreshPortfolioPrices(): Promise<RefreshResult> {
   }
 
   const updatedIds = new Set<string>();
+  const failedIds = new Set<string>();
 
   for (const provider of priceProviders) {
     const batch = instruments.filter((i) => provider.supports(i));
@@ -114,16 +115,24 @@ export async function refreshPortfolioPrices(): Promise<RefreshResult> {
         updatedIds.add(q.instrumentId);
       }
     } catch (e) {
-      pricesFailed += batch.length;
+      // Whole batch errored — mark each instrument as failed (deduped below
+      // against anything another provider still managed to price).
+      for (const inst of batch) failedIds.add(inst.id);
       errors.push(
         `${provider.source}: ${e instanceof Error ? e.message : "fetch failed"}`,
       );
     }
   }
 
+  // A successfully priced instrument is never "failed", even if some other
+  // provider's batch threw.
+  for (const id of updatedIds) failedIds.delete(id);
+
   pricesUpdated = updatedIds.size;
-  const pricesSkipped = instruments.length - updatedIds.size;
-  pricesFailed = Math.max(0, pricesFailed - pricesUpdated);
+  pricesFailed = failedIds.size;
+  // Skipped = no quote found but no provider error (e.g. unmatched fund).
+  const pricesSkipped =
+    instruments.length - updatedIds.size - failedIds.size;
 
   return {
     ok: errors.length === 0 || pricesUpdated > 0 || fxUpdated,

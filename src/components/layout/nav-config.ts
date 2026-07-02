@@ -3,6 +3,7 @@ import {
   TrendingUp,
   Landmark,
   CreditCard,
+  Upload,
   Settings,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -19,5 +20,6 @@ export const navItems: NavItem[] = [
   { label: "Investments", href: "/holdings", icon: TrendingUp },
   { label: "Accounts", href: "/accounts", icon: Landmark },
   { label: "Cards", href: "/cards", icon: CreditCard },
+  { label: "Import", href: "/import", icon: Upload },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

@@ -38,14 +38,42 @@ function pnlClass(value: number): string {
 type SortField = "name" | "source" | "quantity" | "invested" | "value" | "pnl" | "weight";
 type SortOrder = "asc" | "desc";
 
+// Declared at module scope (not inside the component) so React keeps a stable
+// component identity across renders — otherwise the header buttons remount and
+// lose focus every time the table re-sorts.
+function SortHeader({
+  field,
+  activeField,
+  onSort,
+  children,
+}: {
+  field: SortField;
+  activeField: SortField;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+}) {
+  const isActive = activeField === field;
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className="group inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+    >
+      {children}
+      <ArrowUpDown
+        className={`size-3.5 opacity-60 group-hover:opacity-100 ${isActive ? "text-primary opacity-100" : ""}`}
+      />
+    </button>
+  );
+}
+
 export function HoldingsTable({ holdings: initialHoldings }: { holdings: HoldingView[] }) {
   const [sortField, setSortField] = React.useState<SortField>("weight");
   const [sortOrder, setSortOrder] = React.useState<SortOrder>("desc");
 
   const sortedHoldings = React.useMemo(() => {
     return [...initialHoldings].sort((a, b) => {
-      let valA: any = 0;
-      let valB: any = 0;
+      let valA: string | number = 0;
+      let valB: string | number = 0;
 
       switch (sortField) {
         case "name":
@@ -93,45 +121,32 @@ export function HoldingsTable({ holdings: initialHoldings }: { holdings: Holding
     }
   };
 
-  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => {
-    const isActive = sortField === field;
-    return (
-      <button
-        onClick={() => handleSort(field)}
-        className="group inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-      >
-        {children}
-        <ArrowUpDown className={`size-3.5 opacity-60 group-hover:opacity-100 ${isActive ? "text-primary opacity-100" : ""}`} />
-      </button>
-    );
-  };
-
   return (
     <div className="border-border overflow-x-auto rounded-xl border">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>
-              <SortHeader field="name">Instrument</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="name">Instrument</SortHeader>
             </TableHead>
             <TableHead>
-              <SortHeader field="source">Source</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="source">Source</SortHeader>
             </TableHead>
             <TableHead className="text-right">
-              <SortHeader field="quantity">Qty</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="quantity">Qty</SortHeader>
             </TableHead>
             <TableHead className="text-right">Avg buy</TableHead>
             <TableHead className="text-right">
-              <SortHeader field="invested">Invested</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="invested">Invested</SortHeader>
             </TableHead>
             <TableHead className="text-right">
-              <SortHeader field="value">Value</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="value">Value</SortHeader>
             </TableHead>
             <TableHead className="text-right">
-              <SortHeader field="pnl">P/L</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="pnl">P/L</SortHeader>
             </TableHead>
             <TableHead className="text-right">
-              <SortHeader field="weight">Weight</SortHeader>
+              <SortHeader activeField={sortField} onSort={handleSort} field="weight">Weight</SortHeader>
             </TableHead>
             <TableHead className="w-[1%]" />
           </TableRow>

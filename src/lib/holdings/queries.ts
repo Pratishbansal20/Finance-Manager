@@ -1,11 +1,18 @@
+import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import { getUsdInrRate } from "@/lib/portfolio/fx";
 import { buildPortfolio, type Portfolio } from "@/lib/portfolio/valuation";
 
-// Loads a user's holdings, attaches each instrument's latest price (none yet
-// until Milestone 4), and returns the fully-valued portfolio (per-holding views
-// + summary). Always scoped by userId — the only entry point the UI uses.
-export async function getUserPortfolio(userId: string): Promise<Portfolio> {
+// Loads a user's holdings, attaches each instrument's latest cached price, and
+// returns the fully-valued portfolio (per-holding views + summary). Always
+// scoped by userId — the only entry point the UI uses.
+//
+// Wrapped in React `cache()` so the several callers that run within one request
+// (the dashboard layout's pricing-status badge + the page itself) share a
+// single DB round-trip instead of re-valuing the portfolio each time.
+export const getUserPortfolio = cache(async function getUserPortfolio(
+  userId: string,
+): Promise<Portfolio> {
   const holdings = await prisma.holding.findMany({
     where: { userId },
     include: { instrument: true },
@@ -45,4 +52,4 @@ export async function getUserPortfolio(userId: string): Promise<Portfolio> {
   }));
 
   return buildPortfolio(inputs, { usdInr: rate, fxIsLive: isLive });
-}
+});

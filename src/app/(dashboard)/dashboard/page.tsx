@@ -25,6 +25,8 @@ import {
 import { getSipPlans, monthlySipTotal } from "@/lib/sips/queries";
 import { consolidateBySource } from "@/lib/holdings/consolidation";
 import { computeNetWorth } from "@/lib/networth/compute";
+import { recordDailySnapshot, getSnapshots } from "@/lib/snapshots/queries";
+import { PerformanceChart } from "@/components/dashboard/performance-chart";
 import { formatInr, formatPct } from "@/lib/money";
 
 function nwClass(value: number): string {
@@ -106,15 +108,26 @@ export default async function DashboardPage() {
     });
   }
 
-  // 4. Cards check
-  const staleCards = cards.filter((c) => new Date(c.utilizationPct >= 0 ? new Date() : new Date()) < staleThreshold); // Cards are usually dynamic but let's check due card dates or static outstanding updates if any
-  
+  // 4. Credit-card payments due within the next 7 days.
+  if (upcomingDues.length > 0) {
+    reminders.push({
+      id: "card-dues",
+      message: `${upcomingDues.length} credit-card payment${upcomingDues.length > 1 ? "s" : ""} due within 7 days.`,
+      href: "/cards",
+    });
+  }
+
   const everythingEmpty =
     nw.totalAssetsInr === 0 && cardOutstandingInr === 0 && !creditScore;
 
   if (everythingEmpty) {
     return <OverviewEmpty name={user.name} />;
   }
+
+  // Record today's portfolio point (idempotent per day) then load the curve.
+  // recordDailySnapshot reuses the request-cached portfolio, so no extra query.
+  await recordDailySnapshot(user.id);
+  const snapshots = investmentsInr > 0 ? await getSnapshots(user.id, 90) : [];
 
   const composition = [
     { label: "Investments", value: investmentsInr, href: "/holdings" },
@@ -174,6 +187,8 @@ export default async function DashboardPage() {
           <CreditScoreTile score={creditScore} />
         </div>
       </div>
+
+      {investmentsInr > 0 && <PerformanceChart points={snapshots} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Composition */}
