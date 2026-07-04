@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/require-user";
 import { refreshPortfolioPrices } from "@/lib/portfolio/refresh";
+import { writeDailyNetWorthSnapshot } from "@/lib/networth/snapshot";
 
 export type RefreshPricesResult = {
   ok: boolean;
@@ -10,9 +11,12 @@ export type RefreshPricesResult = {
 };
 
 export async function refreshPricesAction(): Promise<RefreshPricesResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const result = await refreshPortfolioPrices();
+
+  // Record today's net worth so the trend chart accrues history on each refresh.
+  await writeDailyNetWorthSnapshot(user.id);
 
   revalidatePath("/dashboard");
   revalidatePath("/holdings");

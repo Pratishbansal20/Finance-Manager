@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   TrendingUp,
+  Layers,
   Landmark,
   CreditCard,
   Settings,
@@ -17,6 +18,7 @@ export type NavItem = {
 export const navItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Investments", href: "/holdings", icon: TrendingUp },
+  { label: "Funds", href: "/funds", icon: Layers },
   { label: "Accounts", href: "/accounts", icon: Landmark },
   { label: "Cards", href: "/cards", icon: CreditCard },
   { label: "Settings", href: "/settings", icon: Settings },

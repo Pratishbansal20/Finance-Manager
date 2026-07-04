@@ -25,7 +25,14 @@ import {
 import { getSipPlans, monthlySipTotal } from "@/lib/sips/queries";
 import { consolidateBySource } from "@/lib/holdings/consolidation";
 import { computeNetWorth } from "@/lib/networth/compute";
+import { getNetWorthHistory } from "@/lib/networth/snapshot";
+import {
+  allocationByAssetClass,
+  allocationByCountry,
+} from "@/lib/portfolio/allocation";
 import { formatInr, formatPct } from "@/lib/money";
+import { NetWorthTrend } from "@/components/charts/net-worth-trend";
+import { AllocationDonut } from "@/components/charts/allocation-donut";
 
 function nwClass(value: number): string {
   if (value > 0) return "text-foreground";
@@ -40,7 +47,7 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [portfolio, banks, assets, cards, creditScore, sips] =
+  const [portfolio, banks, assets, cards, creditScore, sips, history] =
     await Promise.all([
       getUserPortfolio(user.id),
       getBankAccounts(user.id),
@@ -48,6 +55,7 @@ export default async function DashboardPage() {
       getCreditCards(user.id),
       getLatestCreditScore(user.id),
       getSipPlans(user.id),
+      getNetWorthHistory(user.id),
     ]);
 
   const bankInr = sumBalances(banks);
@@ -66,6 +74,9 @@ export default async function DashboardPage() {
   const totalInvestedInr = investmentsInvestedInr + bankInr + otherAssetsInr;
 
   const consolidation = consolidateBySource(portfolio.holdings);
+  const allocByClass = allocationByAssetClass(portfolio.holdings);
+  const allocByCountry = allocationByCountry(portfolio.holdings);
+  const hasInvestments = portfolio.holdings.length > 0;
   const upcomingSips = sips.filter((s) => s.active).slice(0, 5);
   const upcomingDues = dueCards(cards).slice(0, 5);
   const monthlySip = monthlySipTotal(sips);
@@ -174,6 +185,64 @@ export default async function DashboardPage() {
           <CreditScoreTile score={creditScore} />
         </div>
       </div>
+
+      {/* Net-worth trend */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Net worth over time</CardTitle>
+          <CardDescription>
+            {history.length >= 2
+              ? "Recorded on each price refresh"
+              : "Builds up as you refresh prices"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {history.length >= 2 ? (
+            <NetWorthTrend data={history} />
+          ) : (
+            <div className="border-border text-muted-foreground flex h-40 items-center justify-center rounded-lg border border-dashed text-sm">
+              Your net-worth history will chart here after a couple of daily
+              refreshes.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Allocation donuts */}
+      {hasInvestments && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Allocation by asset class</CardTitle>
+              <CardDescription>How your investments split</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AllocationDonut
+                data={allocByClass.map((s) => ({
+                  label: s.label,
+                  value: s.valueInr,
+                }))}
+                centerLabel="Invested"
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Allocation by country</CardTitle>
+              <CardDescription>Geographic exposure</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AllocationDonut
+                data={allocByCountry.map((s) => ({
+                  label: s.label,
+                  value: s.valueInr,
+                }))}
+                centerLabel="Invested"
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Composition */}

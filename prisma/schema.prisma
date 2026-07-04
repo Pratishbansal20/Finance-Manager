@@ -98,12 +98,31 @@ model Instrument {
   currency  String // ISO 4217 of the instrument's native price, e.g. "INR", "USD"
   externalId String? // source-specific id (AMFI scheme code, exchange ticker, etc.)
 
-  holdings Holding[]
-  prices   Price[]
-  sipPlans SipPlan[]
+  holdings     Holding[]
+  prices       Price[]
+  sipPlans     SipPlan[]
+  fundHoldings FundHolding[]
 
   @@unique([type, symbol])
   @@index([type])
+}
+
+// A single constituent of a mutual fund (the stocks the fund itself owns), used
+// for overlap / sector / company-weightage analysis. Sourced from the holdings
+// provider (mfdata.in) or seeded manually; refreshed per disclosure month.
+model FundHolding {
+  id           String   @id @default(cuid())
+  instrumentId String // the mutual-fund Instrument this constituent belongs to
+  stock        String // constituent company name, normalized
+  sector       String   @default("Unknown")
+  weightPct    Decimal  @db.Decimal(6, 3) // % of the fund in this stock
+  asOf         DateTime // disclosure month
+  source       String   @default("SEED")
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, stock, asOf])
+  @@index([instrumentId, asOf])
 }
 
 // A user's position in an instrument, optionally tagged by the broker it came from.
@@ -154,11 +173,16 @@ model FxRate {
 }
 
 // Daily snapshot of a user's total portfolio value — powers the performance curve.
+// Daily snapshot of a user's finances — powers the net-worth trend chart.
+// asOf is normalized to start-of-day so there's one upserted row per day.
 model PortfolioSnapshot {
   id           String   @id @default(cuid())
   userId       String
-  totalValueInr Decimal @db.Decimal(20, 2)
-  investedInr   Decimal @db.Decimal(20, 2)
+  totalValueInr Decimal @db.Decimal(20, 2) // investments (current value)
+  investedInr   Decimal @db.Decimal(20, 2) // investments cost basis
+  netWorthInr        Decimal @db.Decimal(20, 2) @default(0)
+  totalAssetsInr     Decimal @db.Decimal(20, 2) @default(0)
+  totalLiabilitiesInr Decimal @db.Decimal(20, 2) @default(0)
   asOf         DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
