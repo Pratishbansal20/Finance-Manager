@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { refreshPortfolioPrices } from "@/lib/portfolio/refresh";
+import { refreshFundHoldings } from "@/lib/funds/refresh";
 import { writeDailyNetWorthSnapshot } from "@/lib/networth/snapshot";
 
 // Uses the pg adapter (Node) — must not run on the edge.
@@ -23,6 +24,9 @@ export async function GET(request: Request) {
 
   const result = await refreshPortfolioPrices();
 
+  // Refresh mutual-fund constituents (graceful — keeps previous on failure).
+  const funds = await refreshFundHoldings();
+
   const users = await prisma.user.findMany({ select: { id: true } });
   for (const u of users) {
     await writeDailyNetWorthSnapshot(u.id);
@@ -32,6 +36,8 @@ export async function GET(request: Request) {
     ok: result.ok,
     pricesUpdated: result.pricesUpdated,
     fxUpdated: result.fxUpdated,
+    fundsUpdated: funds.updated,
+    fundsFailed: funds.failed,
     snapshots: users.length,
     errors: result.errors,
     refreshedAt: result.refreshedAt,

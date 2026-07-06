@@ -11,6 +11,8 @@ import { requireUser } from "@/lib/auth/require-user";
 import { getUserFundAnalysis } from "@/lib/funds/queries";
 import { formatInr } from "@/lib/money";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { RefreshFundsButton } from "@/components/funds/refresh-funds-button";
+import { FundHoldingsList } from "@/components/funds/fund-holdings-list";
 
 function overlapColor(pct: number): string {
   // 0–25%+ mapped to increasing primary tint.
@@ -44,22 +46,25 @@ export default async function FundsPage() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">Mutual Funds</h2>
-        <p className="text-muted-foreground text-sm">
-          {formatInr(analysis.totalMfValueInr)} across {analysis.funds.length}{" "}
-          fund{analysis.funds.length > 1 ? "s" : ""} ·{" "}
-          {analysis.fundsWithData} analysed
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Mutual Funds</h2>
+          <p className="text-muted-foreground text-sm">
+            {formatInr(analysis.totalMfValueInr)} across {analysis.funds.length}{" "}
+            fund{analysis.funds.length > 1 ? "s" : ""} ·{" "}
+            {analysis.fundsWithData} analysed
+          </p>
+        </div>
+        <RefreshFundsButton />
       </div>
 
       {/* Data disclaimer */}
       <div className="border-border bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-lg border px-4 py-2.5 text-xs">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          Constituent data is a seeded snapshot (top holdings, ~May 2026). Overlap
-          and sector figures are directional; they refresh to exact monthly
-          disclosures once the holdings API is connected.
+          Constituent data is scraped from Groww&apos;s latest disclosed
+          portfolios (unofficial source). Refresh pulls current holdings; if a
+          fetch fails, the previous data is kept.
         </span>
       </div>
 
@@ -157,21 +162,8 @@ export default async function FundsPage() {
               </div>
             </CardHeader>
             {f.constituents.length > 0 && (
-              <CardContent className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                {f.constituents.map((c) => (
-                  <div
-                    key={c.stock}
-                    className="flex items-center justify-between gap-2 text-sm"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">{c.stock}</span>
-                      <span className="text-muted-foreground text-[10px]">
-                        {c.sector}
-                      </span>
-                    </span>
-                    <span className="tabular-nums">{c.weightPct.toFixed(1)}%</span>
-                  </div>
-                ))}
+              <CardContent>
+                <FundHoldingsList constituents={f.constituents} />
               </CardContent>
             )}
           </Card>
